@@ -2,23 +2,53 @@
   Author: V. Klopfenstein
   
   Disclaimer:
-    A very large portion of this code has been 'borrowed' from https://www.locarbftw.com/understanding-the-arduino-mavlink-library/
-    His article was the first to actually explain how the arduino mavlink library works.
-    Additionally, it has somewhat explained the anatomy of the MAVLink protocol.
-    
+    Pretty much all of the MAVLink interfacing code has been 'borrowed' from https://www.locarbftw.com/understanding-the-arduino-mavlink-library/
+    Their article was the first to actually explain how the arduino mavlink library works.    
     It was also the only public code that wasn't unnecessarily bloated. 
     
     For MAVLink message IDs, refer to:
       https://mavlink.io/en/messages/common.html#messages
-
 */
+
+// =========================================
+// HEAD
+// =========================================
 
 #include <mavlink.h>
 #include <SoftwareSerial.h>
+#include <FastLED.h>
 
-SoftwareSerial mlSerial(12, 11); // RX / TX
+SoftwareSerial mlSerial(12, 11); // RX, TX
 
+// Channel settings
+int chThr = 4;          // Channel used for throttle
+int chYaw = 2;          // Channel used for yaw
+int chDeviation = 100;  // Max deviation in ms from channel midpoint.
+                        // Calculation is as follows: (chVal - chDeviation && chVal + chDeviation)
+int chThrMid = 1500;    // Midpoint of throttle in ms
+int chYawMid = 1500;    // Midpoint of yaw in ms
+uint16_t chMap[8] = {};
+
+// Misc settings
+bool carReversing = false;
+
+// LED settings
+#define LED_PIN     5
+#define NUM_LEDS    14
+#define BRIGHTNESS  64
+#define LED_TYPE    WS2811
+#define COLOR_ORDER GRB
+CRGB leds[NUM_LEDS];
+
+// =========================================
+// MAIN
+// =========================================
+
+// Setup
 void setup() {
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(BRIGHTNESS);
+
   Serial.begin(57600);    // Init arduino serial RX/TX
   mlSerial.begin(57600);  // Init serial RX/TX for MAVLink interface
   
@@ -27,12 +57,25 @@ void setup() {
   request_datastream();
 }
 
+// Loop
 void loop() {  
   MavLink_receive();
   
-  // TODO:
-   // Handle shit
+  // Check if chThr is lesser than ChThrMid when accounting with deviation as well
+  Serial.println(chMap[chThr - 1]);
+  if (chMap[chThr - 1] < (chThrMid - chDeviation)) {
+    carReversing = true;
+  } else {
+    carReversing = false;
+  }
+
+  // Control REAR LEDs based on value of carReversings
+
 }
+
+// =========================================
+// FUNCTIONS
+// =========================================
 
 // Receive MAVLink stream
 void MavLink_receive() {
@@ -54,25 +97,18 @@ void MavLink_receive() {
         case MAVLINK_MSG_ID_RC_CHANNELS_RAW: { // # MSG ID: 35    
             mavlink_rc_channels_raw_t packet;
             mavlink_msg_rc_channels_raw_decode( & msg, & packet); 
-              
-            Serial.print("PX RC CHANNLES (RAW): ");
-            Serial.print("[CH1: ");
-            Serial.print(packet.chan1_raw);
-            Serial.print("], [CH2: ");
-            Serial.print(packet.chan2_raw);
-            Serial.print("], [CH3: ");
-            Serial.print(packet.chan3_raw);
-            Serial.print("], [CH4: ");
-            Serial.print(packet.chan4_raw);
-            Serial.print("], [CH5: ");
-            Serial.print(packet.chan5_raw);
-            Serial.print("], [CH6: ");
-            Serial.print(packet.chan6_raw);
-            Serial.print("], [CH7: ");
-            Serial.print(packet.chan7_raw);
-            Serial.print("], [RSSI: ");
-            Serial.print(packet.rssi);
-            Serial.println("]");
+
+            // Populate chMap array
+            uint16_t chMap[8] = {
+              packet.chan1_raw,
+              packet.chan2_raw,
+              packet.chan3_raw,
+              packet.chan4_raw,
+              packet.chan5_raw,
+              packet.chan6_raw,
+              packet.chan7_raw,
+              packet.chan8_raw,
+            };
           }
         break;
       }
