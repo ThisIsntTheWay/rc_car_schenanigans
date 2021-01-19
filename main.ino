@@ -14,6 +14,14 @@
     
     For MAVLink message IDs, refer to:
       https://mavlink.io/en/messages/common.html#messages
+
+  TODO:
+    Bugfix turning indicators.
+      > The LEFT indicator light does NOT return if still indicating AND reversing.
+        Additionally, the RIGHT white LED never returns to RED.
+      > It is possible to light both indicator lights if turning RIGHT first, then turning sharply applying LEFT.
+        This is most likely due to the low update rate of the MAVLink publisher, as the midzone never gets detected.
+        As such, the arduino never knows that it should stop indicating.
 */
 
 // =========================================
@@ -50,6 +58,10 @@ uint16_t chMap[4] = {};
 // Misc settings
 bool carReversing = false;
 bool revLEDsChanged = false;
+/*
+  bool carIndicating = false;
+  bool turnLEDsChanged = false;
+*/
 uint8_t carTurningDirection = 0;
   // - '1' for RIGHT, '2' for LEFT, 'N' for NONE
 
@@ -71,7 +83,7 @@ void setup() {
   // LEDs setup
   // -------------------------------------
   // PARAMS: <LED_TYPE>, <LED_PIN>, <COLOR_ORDER>(leds, <NUM_LEDS>)
-  FastLED.addLeds<LED_TYPE, 5, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_TYPE, 4, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(100);
   
   // Power down LEDs
@@ -89,12 +101,13 @@ void setup() {
   // Show arduino bootup completion with LEDs
   // -------------------------------------
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
-      delay(100);
-      leds[i] = CRGB::Blue;
+      delay(50);
+      leds[i] = CRGB::Green;
       FastLED.show();
     }
 
-    delay(750);
+    delay(500);
+    FastLED.setBrightness(50);
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
       leds[i] = CRGB::Red;
     }
@@ -113,26 +126,50 @@ void loop() {
   // Channel watcher
       // Check if chThr is lesser than 1500 when accounting with deviation as well
       if (chMap[chThr - 1] < (1500 - chDeviation)) {
-          Serial.println(F("DIR: REVERSE"));
-
+        carReversing = true;
         if (!revLEDsChanged) {
-          Serial.println(F("LED_CHANGED"));
+          Serial.println(F("LED > White"));
           leds[0] = CRGB::White;
           leds[1] = CRGB::White;
+          leds[5] = CRGB::White;
+          leds[6] = CRGB::White;
           FastLED.show();
+          
           revLEDsChanged = true;
         }
       } else {
-        revLEDsChanged = false;
+        carReversing = false;
         // Only revert LED colors IF car was previously reversing.
         // Otherwise, FastLED.show() gets called all the time.
-        if (carReversing == true) {
+        if (revLEDsChanged) {
+          Serial.println(F("LED > Red"));
           leds[0] = CRGB::Red;
           leds[1] = CRGB::Red;
+          leds[5] = CRGB::Red;
+          leds[6] = CRGB::Red;
           FastLED.show();
-
-          carReversing == false;
+          /*
+          if (carIndicating) {
+            switch (carTurningDirection) {
+              case 2: { 
+                Serial.println(F("LED LEFT > Orange"));
+                leds[5] = CRGB::Red;
+                leds[6] = CRGB::Red;
+                FastLED.show();
+              };
+              break;
+              case 1: { 
+                  Serial.println(F("LED RIGHT > Orange"));
+                  leds[0] = CRGB::Red;
+                  leds[1] = CRGB::Red;
+                  FastLED.show();
+              };
+              break;  
+            }  
+          */
+          revLEDsChanged = false;     
         }
+
       }
 
       /*
@@ -158,20 +195,58 @@ void loop() {
       }
 
   // Turn indication
-    switch (carTurningDirection) {
+  /*
+  switch (carTurningDirection) {
       case 2: { 
-        Serial.println(F("DIR: LEFT."));
+        if (!turnLEDsChanged) {
+          Serial.println(F("LED LEFT > Orange"));
+          leds[5] = CRGB::Orange;
+          leds[6] = CRGB::Orange;
+          FastLED.show();
+
+          turnLEDsChanged = true;
+          carIndicating = true;
+        }
       };
       break;
       case 1: { 
-        Serial.println(F("DIR: RIGHT."));
+        if (!turnLEDsChanged) {
+          Serial.println(F("LED RIGHT > Orange"));
+          leds[0] = CRGB::Orange;
+          leds[1] = CRGB::Orange;
+          FastLED.show();
+
+          turnLEDsChanged = false;
+          carIndicating = true;
+        }
       };
       break;
       case 0: {
+        if (carIndicating && !carReversing) {
+          Serial.println(F("LED IND > Red"));
+          leds[0] = CRGB::Red;
+          leds[1] = CRGB::Red;
+          leds[5] = CRGB::Red;
+          leds[6] = CRGB::Red;
+          FastLED.show();
+
+          turnLEDsChanged = false;
+          carIndicating = false;
+        } else if (carIndicating && carReversing) {
+          Serial.println(F("LED IND > Red"));
+          leds[0] = CRGB::White;
+          leds[1] = CRGB::White;
+          leds[5] = CRGB::White;
+          leds[6] = CRGB::White;
+          FastLED.show();
+
+          turnLEDsChanged = false;
+          carIndicating = false;
+        }
         //Serial.println(F("T IN: NONE"));
       };
     break;
-  }
+  }*/
 }
 
 // =========================================
