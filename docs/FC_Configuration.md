@@ -1,6 +1,6 @@
 # FC configuration
-The FC used is a T-Motor F722, but anything should work.
-BF Version is: 4.2.6
+##### The FC used is a T-Motor F722, but anything should work.  
+##### BF Version is: 4.2.6
 ------------
 ### Ports
 ![](https://i.imgur.com/1Gxg4fi.png)
