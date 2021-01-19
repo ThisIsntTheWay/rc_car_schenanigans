@@ -14,9 +14,6 @@
     
     For MAVLink message IDs, refer to:
       https://mavlink.io/en/messages/common.html#messages
-      
-   INFO:
-     Untested release candidate
 */
 
 // =========================================
@@ -52,6 +49,7 @@ uint16_t chMap[4] = {};
 
 // Misc settings
 bool carReversing = false;
+bool revLEDsChanged = false;
 uint8_t carTurningDirection = 0;
   // - '1' for RIGHT, '2' for LEFT, 'N' for NONE
 
@@ -69,8 +67,6 @@ void setup() {
   delay(300);
   Serial.begin(57600);    // Init arduino serial RX/TX
   mlSerial.begin(57600);  // Init serial RX/TX for MAVLink interface
-  
-  Serial.print(F("---"));
 
   // LEDs setup
   // -------------------------------------
@@ -116,17 +112,27 @@ void loop() {
   request_MAVLinkData();
   // Channel watcher
       // Check if chThr is lesser than 1500 when accounting with deviation as well
-          //Serial.print(F("[THR]: "));
-          //Serial.println(chMap[chThr - 1]);
       if (chMap[chThr - 1] < (1500 - chDeviation)) {
-        Serial.println(F("DIR: REVERSE"));
-        leds[0] = CRGB::White;
-        leds[1] = CRGB::White;
-        FastLED.show();
+          Serial.println(F("DIR: REVERSE"));
+
+        if (!revLEDsChanged) {
+          Serial.println(F("LED_CHANGED"));
+          leds[0] = CRGB::White;
+          leds[1] = CRGB::White;
+          FastLED.show();
+          revLEDsChanged = true;
+        }
       } else {
-        leds[0] = CRGB::Red;
-        leds[1] = CRGB::Red;
-        FastLED.show();
+        revLEDsChanged = false;
+        // Only revert LED colors IF car was previously reversing.
+        // Otherwise, FastLED.show() gets called all the time.
+        if (carReversing == true) {
+          leds[0] = CRGB::Red;
+          leds[1] = CRGB::Red;
+          FastLED.show();
+
+          carReversing == false;
+        }
       }
 
       /*
