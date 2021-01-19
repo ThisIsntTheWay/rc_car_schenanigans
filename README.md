@@ -1,5 +1,5 @@
 # ****RC Car shenanigans****
-The purpose of this repo is to document various resources in reagrds to my private RC car project.
+The purpose of this repo is to document various ressources in regards to my private RC car project.
 
 ## Overview
 The project consists of modding a 1:10 RC car to be capable of having an FPV feed.  
@@ -11,6 +11,7 @@ The car will be controlled using a BF compatible FC.
 The reasons for this are as follows:
  - Easy interfacing with additional sensors.
    - Mainly a GPS.
+ - OSD capability.
  - Possibility of exchanging telemetry data with a transmitter. 
  - Creating a MAVLink interface.
 
