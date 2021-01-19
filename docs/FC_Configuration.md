@@ -35,7 +35,7 @@ set d_min_pitch = 0
 ```
 ------------
 ### Rates
-![](https://i.imgur.com/wsxsG2p.png)
+![](https://i.imgur.com/J0mhFsz.png)
 ```
 set thr_mid = 0
 set thr_expo = 80
