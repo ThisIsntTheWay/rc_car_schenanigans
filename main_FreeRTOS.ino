@@ -18,7 +18,7 @@
    !!!!!!!!!!!!!!!!      
    INFO:
      The current implementation of FreeRTOS in this code suffers from low SRAM (180 Bytes free) on an Arduino UNO.
-     For the moment, development on this code will be halted for the moment.  
+     For the moment, development on this code will be halted for the moment until an arduino-compatible MCU bit sufficient RAM can be sourced.
    !!!!!!!!!!!!!!!!
 */
 
@@ -47,7 +47,7 @@ SoftwareSerial mlSerial(12, 11); // RX, TX
 
 // Channel settings
 uint8_t chThr = 4;          // Channel used for throttle
-uint8_t chYaw = 2;          // Channel used for yaw
+uint8_t chYaw = 3;          // Channel used for yaw
 uint8_t chDeviation = 100;  // Max deviation in ms from channel midpoint.
                         // Calculation is as follows: (chVal - chDeviation && chVal + chDeviation)
 /*uint16_t chThrMid = 1500;    // Midpoint of throttle in ms
@@ -56,6 +56,7 @@ uint16_t chMap[4] = {};
 
 // Misc settings
 bool carReversing = false;
+bool revLEDsActive = false;
 uint8_t carTurningDirection = 0;
   // - '1' for RIGHT, '2' for LEFT, 'N' for NONE
 
@@ -82,14 +83,13 @@ void setup() {
   Serial.begin(57600);    // Init arduino serial RX/TX
   mlSerial.begin(57600);  // Init serial RX/TX for MAVLink interface
   
-  Serial.print(F("---"));
-
-    
+  Serial.println(F("Boot begin"));
+      
   // LEDs setup
   // -------------------------------------
     // PARAMS: <LED_TYPE>, <LED_PIN>, <COLOR_ORDER>(leds, <NUM_LEDS>)
-    FastLED.addLeds<LED_TYPE, 5, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-    FastLED.setBrightness(100);
+    FastLED.addLeds<LED_TYPE, 4, GRB>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+    FastLED.setBrightness(50);
     
     // Power down LEDs
     for (uint8_t i = 0; i < NUM_LEDS; i++) {
@@ -103,15 +103,23 @@ void setup() {
   Serial.print(F("0 - "));
   Serial.println(availableMemory());
 
+  // Show bootup progress with LEDs
+  // -------------------------------------
+    for (byte i = 0; i < NUM_LEDS; i++) {
+      delay(50);
+      leds[i] = CRGB::Green;
+      FastLED.show();
+    }
+
   // Create Tasks
   // -------------------------------------
   Serial.print(F("1 - "));
       xTaskCreate(
         taskMAVLinkTelem
-        ,  "MA"
+        ,  "M"
         ,  128    // Stack size
         ,  NULL   // Task param
-        ,  1      // Priority
+        ,  4      // Priority
         ,  NULL   // Task handle
       );
   Serial.println(availableMemory());
@@ -119,10 +127,10 @@ void setup() {
   Serial.print(F("2 - "));
       xTaskCreate(
         taskChannelWatcher
-        ,  "RC"
+        ,  "R"
         ,  64    // Stack size
         ,  NULL   // Task param
-        ,  1      // Priority
+        ,  3      // Priority
         ,  NULL   // Task handle
       );
   Serial.println(availableMemory());
@@ -130,8 +138,8 @@ void setup() {
   Serial.print(F("3 - "));
       xTaskCreate(
         taskTurnIndicator
-        ,  "TI"
-        ,  16    // Stack size
+        ,  "T"
+        ,  32    // Stack size
         ,  NULL   // Task param
         ,  1      // Priority
         ,  NULL   // Task handle
@@ -141,8 +149,8 @@ void setup() {
   Serial.print(F("4 - "));
       xTaskCreate(
         taskReverseIndicator
-        ,  "RI"
-        ,  16    // Stack size
+        ,  "B"
+        ,  32    // Stack size
         ,  NULL   // Task param
         ,  1      // Priority
         ,  NULL   // Task handle
@@ -150,15 +158,6 @@ void setup() {
   Serial.println(availableMemory());
 
   // -------------------------------------
-
-  // Show arduino bootup completion with fastLEDs
-  // -------------------------------------
-    for (byte i = 0; i < NUM_LEDS; i++) {
-      delay(100);
-      leds[i] = CRGB::Blue;
-      FastLED.show();
-    }
-
     delay(750);
     for (byte i = 0; i < NUM_LEDS; i++) {
       leds[i] = CRGB::Red;
@@ -168,6 +167,8 @@ void setup() {
 
   Serial.print(F("d - "));
   Serial.println(availableMemory());
+  
+  Serial.println(F("Boot complete"));
 }
 
 void loop() {
@@ -180,10 +181,15 @@ void loop() {
 
 void taskMAVLinkTelem(void *pvParameters)
 {
-  Serial.begin(57600);
+  //Serial.begin(57600);
   Serial.println(F("mavlink on."));
+  Serial.println(availableMemory());
 
-  while(1) {
+  while(!mlSerial) {
+    vTaskDelay(2);
+  }
+
+  for (;;) {
     mavlink_message_t msg;
     mavlink_status_t status;
 
@@ -199,15 +205,13 @@ void taskMAVLinkTelem(void *pvParameters)
               mavlink_rc_channels_raw_t packet;
               mavlink_msg_rc_channels_raw_decode( & msg, & packet); 
 
-              // Populate chMap array
-              uint16_t chMap[4] = {
-                packet.chan1_raw,
-                packet.chan2_raw,
-                packet.chan3_raw,
-                packet.chan4_raw
-              };
-            break;
-            }
+                // Populate chMap array
+                chMap[0] = 0; //packet.chan1_raw;
+                chMap[1] = 0; //packet.chan2_raw;
+                chMap[2] = packet.chan3_raw; // YAW
+                chMap[3] = packet.chan4_raw; // THROTTLE
+          }
+          break;
         }
       }
     }
@@ -254,13 +258,27 @@ void taskReverseIndicator(void *pvParameters) {
   for (;;) {
     // Control REAR LEDs based on value of carReversing
     if (carReversing) {
-      leds[0] = CRGB::White;
-      leds[1] = CRGB::White;
-      FastLED.show();
+        if (!revLEDsActive) {
+            Serial.println(F("LED > White"));
+            leds[0] = CRGB::White;
+            leds[1] = CRGB::White;
+            leds[5] = CRGB::White;
+            leds[6] = CRGB::White;
+            FastLED.show();
+            
+            revLEDsActive = true;
+        }
     } else {
-      leds[0] = CRGB::Red;
-      leds[1] = CRGB::Red;
-      FastLED.show();
+        if (revLEDsActive) {
+            Serial.println(F("LED > Red"));
+            leds[0] = CRGB::Red;
+            leds[1] = CRGB::Red;
+            leds[5] = CRGB::Red;
+            leds[6] = CRGB::Red;
+            FastLED.show();
+
+            revLEDsActive = false;
+        }
     }
 
     vTaskDelay(1);  // one tick delay (15ms) in between reads for stability
@@ -275,10 +293,37 @@ void taskTurnIndicator(void *pvParameters) {
     switch (carTurningDirection) {
       case 2: { 
         Serial.println(F("T IN: LEFT."));
-      };
+        leds[0] = CRGB::Yellow;
+        leds[1] = CRGB::Yellow;
+        FastLED.show();
+        vTaskDelay(33); // 15ms * 33
+        if (carReversing) {
+            leds[0] = CRGB::White;
+            leds[1] = CRGB::White;
+            FastLED.show();
+        } else {
+            leds[0] = CRGB::Red;
+            leds[1] = CRGB::Red;
+            FastLED.show();
+        }
+
+        }
       break;
       case 1: { 
         Serial.println(F("T IN: RIGHT."));
+        leds[0] = CRGB::Yellow;
+        leds[1] = CRGB::Yellow;
+        FastLED.show();
+        vTaskDelay(33); // 15ms * 33
+        if (carReversing) {
+            leds[5] = CRGB::White;
+            leds[6] = CRGB::White;
+            FastLED.show();
+        } else {
+            leds[5] = CRGB::Red;
+            leds[6] = CRGB::Red;
+            FastLED.show();
+        }
       };
       break;
       case 0: {
